@@ -42,7 +42,7 @@ def parse_metricsoutput_file(input_file):
                 continue
             elif m:
                 # is a group header name from matched Regexp
-                # #(section name in square brackets => section in MultiQC report)
+                # (section name in square brackets => section in MultiQC report)
                 group = m.group(1)
                 # print(group)
             elif group:
@@ -99,8 +99,8 @@ def transpose_table(df):
 def edit_column_headers(edited_df):
     """
     Edits the column headers to be compatible with custom content feature of MultiQC.
-    Rename MEDIAN_INSERT_SIZE (bp) for DNA to MEDIAN_INSERT_SIZE_DNA and MEDIAN_INSERT_SIZE (Count)
-    for RNA to MEDIAN_INSERT_SIZE_RNA.
+    Rename MEDIAN_INSERT_SIZE (bp) for DNA to MEDIAN_INSERT_SIZE_DNA and 
+    MEDIAN_INSERT_SIZE (Count) for RNA to MEDIAN_INSERT_SIZE_RNA.
     Remove the units of each metric.
 
     Parameters
@@ -129,8 +129,8 @@ def edit_column_headers(edited_df):
 
 def add_contamination_bool(full_df):
     """
-    Add CONTAMINATION_SUMMARY column, where False when CONTAMINATION_SCORE > 3106 and
-    CONTAMINATION_P_VALUE > 0.049, else True.
+    Add CONTAMINATION_SUMMARY column, where False when 
+    CONTAMINATION_SCORE > 3106 and CONTAMINATION_P_VALUE > 0.049, else True.
 
     Parameters
     ----------
@@ -145,7 +145,7 @@ def add_contamination_bool(full_df):
     # replace NA string with null value
     full_df.replace("NA", np.nan, inplace=True)
 
-    # contamination metrics converted to float so numerical filtering can be done
+    # contamination metrics converted to float for numerical filtering
     full_df.loc[:, "CONTAMINATION_SCORE"] = full_df.loc[
         :, "CONTAMINATION_SCORE"
     ].astype(float)
@@ -164,7 +164,8 @@ def add_contamination_bool(full_df):
 
     # initialise the new column
     full_df["CONTAMINATION_SUMMARY"] = None
-    # for samples without NaN values, fill CONTAMINATION_SUMMARY with the opposite of filters bool
+    # for samples without NaN values, fill CONTAMINATION_SUMMARY with 
+    # the opposite of filters bool
     full_df.loc[~nan_values, "CONTAMINATION_SUMMARY"] = ~filters[~nan_values]
 
     # add header to index column
@@ -175,8 +176,8 @@ def add_contamination_bool(full_df):
 
 def df_to_tsv(final_df, dna_output_filename, rna_output_filename):
     """
-    Fills NaN values, checks for DNA and RNA samples and if present, saves the DNA and RNA samples 
-    in separate tsv files for input to MultiQC.
+    Fills NaN values, checks for DNA and RNA samples and if present, 
+    saves the DNA and RNA samples in separate tsv files for input to MultiQC.
 
     Parameters
     ----------
