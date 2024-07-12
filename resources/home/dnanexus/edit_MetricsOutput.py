@@ -6,11 +6,6 @@ import pandas as pd
 import numpy as np
 
 
-# TODO: does this go here as global variables? are the names correct or do they need to be capitalised?
-dna_output_filename = "MetricsOutput_MultiQC_DNA.tsv"
-rna_output_filename = "MetricsOutput_MultiQC_RNA.tsv"
-
-
 def parse_metricsoutput_file(input_file):
     """
     Extract only relevant lines from MetricsOutput.tsv and store in dataframe.
@@ -19,8 +14,8 @@ def parse_metricsoutput_file(input_file):
 
     Parameters
     ----------
-    input_file : file
-        MetricsOutput.tsv output from eggd_tso500
+    input_file : str
+        filepath to MetricsOutput.tsv output from eggd_tso500
 
     Returns
     ----------
@@ -164,8 +159,11 @@ def add_contamination_bool(full_df):
 
     # initialise the new column
     full_df["CONTAMINATION_SUMMARY"] = None
-    # for samples without NaN values, fill CONTAMINATION_SUMMARY with 
+    # for samples with contamination values, fill CONTAMINATION_SUMMARY with
     # the opposite of filters bool
+    # if RNA sample, CONTAMINATION_SUMMARY = None
+    # if DNA sample with contamination below threshold, CONTAMINATION_SUMMARY = True
+    # if DNA sample with contamination above threshold, CONTAMINATION_SUMMARY = False
     full_df.loc[~nan_values, "CONTAMINATION_SUMMARY"] = ~filters[~nan_values]
 
     # add header to index column
@@ -176,7 +174,7 @@ def add_contamination_bool(full_df):
 
 def df_to_tsv(final_df, dna_output_filename, rna_output_filename):
     """
-    Fills NaN values, checks for DNA and RNA samples and if present, 
+    Fills NaN values, checks for DNA and RNA samples and if present,
     saves the DNA and RNA samples in separate tsv files for input to MultiQC.
 
     Parameters
@@ -227,6 +225,10 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
+
+    # specify output filenames
+    dna_output_filename = "MetricsOutput_MultiQC_DNA.tsv"
+    rna_output_filename = "MetricsOutput_MultiQC_RNA.tsv"
 
     parsed_file = parse_metricsoutput_file(args.tsv_input)
     transposed_df = transpose_table(parsed_file)
