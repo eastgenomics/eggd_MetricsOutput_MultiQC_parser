@@ -9,7 +9,7 @@ This app produces tsv files that are formatted for input to MultiQC as tables. I
 - `tsv_input` (`file`) - A single MetricsOutput.tsv report generated from the eggd_tso500 app
 
 ## How does this app work?
-The app runs a python script to create two .tsv files from the provided MetricsOutput.tsv file. The output tsv files are modified for MultiQC to take as input in the form of tables. The general outline is as follows:
+The app runs a python script to create two .tsv files (one for DNA samples, one for RNA samples) from the provided MetricsOutput.tsv file. The output tsv files are modified for MultiQC to take as input in the form of tables. The general outline is as follows:
 
 - Download the provided MetricsOutput.tsv file.
 - Parses MetricsOutput.tsv to obtain only the samples and metrics information.
