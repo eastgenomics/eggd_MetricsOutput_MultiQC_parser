@@ -15,7 +15,7 @@ main() {
     dx download "$tsv_input" -o tsv_input
 
     # Install all python packages from this app
-    sudo -H python3 -m pip install --no-index --no-deps packages/*
+    python3 -m pip install --no-index --no-deps packages/*
 
     # Run python script with requires MetricsOutput.tsv file
     python3 edit_MetricsOutput.py tsv_input

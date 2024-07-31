@@ -22,47 +22,48 @@ def parse_metricsoutput_file(input_file):
     df : pd.DataFrame
         modified dataframe
     """
-    with open(input_file, "r", encoding="UTF-8") as file:
-        # TODO: should I remove sample_names? pylint says unused
-        group, sample_names, all_data = "", [], []
-        for line in file:
-            # match data block header
-            m = re.match(r"^\[(.*)\]\s*$", line)
-            if line.startswith("#"):
-                # comment
-                continue
-            elif len(line) == 0 or re.match(r"^\s+$", line):
-                # empty line (reset)
-                group, sample_names = "", []
-                continue
-            elif m:
-                # is a group header name from matched Regexp
-                # (section name in square brackets => section in MultiQC report)
-                group = m.group(1)
-                # print(group)
-            elif group:
-                if group in ["Header"]:
-                    # global metrics/data
-                    pass
-                elif group in ["Analysis Status"]:
-                    contamination_value = line.rstrip().split("\t")[0:]
-                    all_data.append(contamination_value)
-                elif group.startswith("DNA Library") or group.startswith("RNA Library"):
-                    # DNA data line (header or data)
-                    if line.startswith("Metric "):
-                        # is the header line, extract sample names from row
-                        sample_names = line.rstrip().split("\t")[3:]
+    try:
+        with open(input_file, "r", encoding="UTF-8") as file:
+            group, sample_names, all_data = "", [], []
+            for line in file:
+                # match data block header
+                m = re.match(r"^\[(.*)\]\s*$", line)
+                if line.startswith("#"):
+                    # comment
+                    continue
+                elif len(line) == 0 or re.match(r"^\s+$", line):
+                    # empty line (reset)
+                    group, sample_names = "", []
+                    continue
+                elif m:
+                    # is a group header name from matched Regexp
+                    # (section name in square brackets => section in MultiQC report)
+                    group = m.group(1)
+                    # print(group)
+                elif group:
+                    if group in ["Header"]:
+                        # global metrics/data
                         pass
-                    else:
-                        metric_values = (
-                            line.rstrip().split("\t")[:1]
-                            + line.rstrip().split("\t")[3:]
-                        )
-                        all_data.append(metric_values)
-
-    df = pd.DataFrame(all_data)
-
-    return df
+                    elif group in ["Analysis Status"]:
+                        contamination_value = line.rstrip().split("\t")[0:]
+                        all_data.append(contamination_value)
+                    elif group.startswith("DNA Library") or group.startswith("RNA Library"):
+                        # DNA data line (header or data)
+                        if line.startswith("Metric "):
+                            # is the header line, extract sample names from row
+                            sample_names = line.rstrip().split("\t")[3:]
+                            pass
+                        else:
+                            metric_values = (
+                                line.rstrip().split("\t")[:1]
+                                + line.rstrip().split("\t")[3:]
+                            )
+                            all_data.append(metric_values)
+        ### what should I do with this df? does it go in try? does return df go in try
+        df = pd.DataFrame(all_data)
+        return df
+    except FileNotFoundError:
+        raise FileNotFoundError
 
 
 def transpose_table(df):
@@ -108,18 +109,29 @@ def edit_column_headers(edited_df):
     edited_df : pd.DataFrame
         modified dataframe
     """
-    # differentiate MEDIAN_INSERT_SIZE between DNA and RNA
-    edited_df.columns = edited_df.columns.str.replace(
-        "MEDIAN_INSERT_SIZE (bp)", "MEDIAN_INSERT_SIZE_DNA"
-    )
-    edited_df.columns = edited_df.columns.str.replace(
-        "MEDIAN_INSERT_SIZE (Count)", "MEDIAN_INSERT_SIZE_RNA"
-    )
+    try:
+        # differentiate MEDIAN_INSERT_SIZE between DNA and RNA
+        # if a sample type is not present, there will be MEDIAN_INSERT_SIZE (NA) instead
+        if "MEDIAN_INSERT_SIZE (bp)" in edited_df.columns:
+            edited_df.columns = edited_df.columns.str.replace(
+                "MEDIAN_INSERT_SIZE (bp)", "MEDIAN_INSERT_SIZE_DNA"
+            )
+        else:
+            print("There are no DNA samples in this run.")
 
-    # removing the metric units
-    edited_df.columns = edited_df.columns.str.split().str[0]
+        if "MEDIAN_INSERT_SIZE (Count)" in edited_df.columns:
+            edited_df.columns = edited_df.columns.str.replace(
+                "MEDIAN_INSERT_SIZE (Count)", "MEDIAN_INSERT_SIZE_RNA"
+            )
+        else:
+            print("There are no RNA samples in this run.")
 
-    return edited_df
+        # removing the metric units
+        edited_df.columns = edited_df.columns.str.split().str[0]
+
+        return edited_df
+    except:
+        print("Error with editing column headers")
 
 
 def add_contamination_bool(full_df):
@@ -141,12 +153,16 @@ def add_contamination_bool(full_df):
     full_df.replace("NA", np.nan, inplace=True)
 
     # contamination metrics converted to float for numerical filtering
-    full_df.loc[:, "CONTAMINATION_SCORE"] = full_df.loc[
-        :, "CONTAMINATION_SCORE"
-    ].astype(float)
-    full_df.loc[:, "CONTAMINATION_P_VALUE"] = full_df.loc[
-        :, "CONTAMINATION_P_VALUE"
-    ].astype(float)
+    try:
+        full_df.loc[:, "CONTAMINATION_SCORE"] = full_df.loc[
+            :, "CONTAMINATION_SCORE"
+        ].astype(float)
+        full_df.loc[:, "CONTAMINATION_P_VALUE"] = full_df.loc[
+            :, "CONTAMINATION_P_VALUE"
+        ].astype(float)
+    except:
+        print("Error: Could not convert CONTAMINATION_SCORE and CONTAMINATION_P_VALUE to floats")
+        raise ValueError
 
     # specify conditions
     nan_values = (
@@ -164,7 +180,10 @@ def add_contamination_bool(full_df):
     # if RNA sample, CONTAMINATION_SUMMARY = None
     # if DNA sample with contamination below threshold, CONTAMINATION_SUMMARY = True
     # if DNA sample with contamination above threshold, CONTAMINATION_SUMMARY = False
-    full_df.loc[~nan_values, "CONTAMINATION_SUMMARY"] = ~filters[~nan_values]
+    try:
+        full_df.loc[~nan_values, "CONTAMINATION_SUMMARY"] = ~filters[~nan_values]
+    except:
+        print("Error: Could not specify CONTAMINATION_SUMMARY based on contamination thresholds.")
 
     # add header to index column
     full_df.index.name = "Sample"
