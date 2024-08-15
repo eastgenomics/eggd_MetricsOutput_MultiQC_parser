@@ -9,8 +9,7 @@ import numpy as np
 def parse_metricsoutput_file(input_file):
     """
     Extract only relevant lines from MetricsOutput.tsv and store in dataframe.
-    This code partly taken from
-    https://github.com/eastgenomics/multiqc_plugins/blob/develop/seglh_plugin/modules/tso500/tso500.py
+    Transposes table so that metrics are columns and samples are rows.
 
     Parameters
     ----------
@@ -23,71 +22,61 @@ def parse_metricsoutput_file(input_file):
         modified dataframe
     """
     try:
-        with open(input_file, "r", encoding="UTF-8") as file:
-            group, sample_names, all_data = "", [], []
-            for line in file:
-                # match data block header
-                m = re.match(r"^\[(.*)\]\s*$", line)
-                if line.startswith("#"):
-                    # comment
-                    continue
-                elif len(line) == 0 or re.match(r"^\s+$", line):
-                    # empty line (reset)
-                    group, sample_names = "", []
-                    continue
-                elif m:
-                    # is a group header name from matched Regexp
-                    # (section name in square brackets => section in MultiQC report)
-                    group = m.group(1)
-                    # print(group)
-                elif group:
-                    if group in ["Header"]:
-                        # global metrics/data
-                        pass
-                    elif group in ["Analysis Status"]:
-                        contamination_value = line.rstrip().split("\t")[0:]
-                        all_data.append(contamination_value)
-                    elif group.startswith("DNA Library") or group.startswith("RNA Library"):
-                        # DNA data line (header or data)
-                        if line.startswith("Metric "):
-                            # is the header line, extract sample names from row
-                            sample_names = line.rstrip().split("\t")[3:]
-                            pass
-                        else:
-                            metric_values = (
-                                line.rstrip().split("\t")[:1]
-                                + line.rstrip().split("\t")[3:]
-                            )
-                            all_data.append(metric_values)
-        ### what should I do with this df? does it go in try? does return df go in try
-        df = pd.DataFrame(all_data)
-        return df
+        df = pd.read_csv(input_file, sep='\t', header=None)
     except FileNotFoundError:
-        raise FileNotFoundError
+        print("Require input MetricsOutput.tsv file not found.")
 
+    # get the indexes for key headings for MetricsOutput.tsv
+    anaysis_status_index = df[df.iloc[:, 0].fillna('').str.contains("Analysis Status")].index[0]
+    dna_lib_qc_index = df[df.iloc[:, 0].fillna('').str.contains("DNA Library QC Metrics")].index[0]
+    dna_expanded_index = df[df.iloc[:, 0].fillna('').str.contains("DNA Expanded Metrics")].index[0]
+    rna_lib_qc_index = df[df.iloc[:, 0].fillna('').str.contains("RNA Library QC Metrics")].index[0]
+    rna_expanded_index = df[df.iloc[:, 0].fillna('').str.contains("RNA Expanded Metrics")].index[0]
 
-def transpose_table(df):
-    """
-    Transposes table so that metrics are columns and samples are rows
+    # First, get everything after "DNA Library QC Metrics" (to remove guideline columns adn clean)
+    dna_rna_metrics_full = df.iloc[dna_lib_qc_index+1:]
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        modified dataframe
+    # drop the LSL and USL guidelines
+    guidelines = ['LSL Guideline', 'USL Guideline']
+    guideline_columns = dna_rna_metrics_full.applymap(lambda x: any(s in str(x) for s in guidelines)).any()
+    dna_rna_metrics = dna_rna_metrics_full.loc[:, ~guideline_columns]
 
-    Returns
-    ----------
-    transposed_df : pd.DataFrame
-        transposed dataframe
-    """
-    transposed_df = df.transpose()
+    # drop the DNA and RNA extended metrics
+    dna_rna_metrics = dna_rna_metrics.drop(index=range(dna_expanded_index, rna_lib_qc_index))
+    dna_rna_metrics = dna_rna_metrics.loc[:rna_expanded_index-1]
 
-    # set sample names as index
-    transposed_df.set_index(0, inplace=True)
+    # get indexes of lines that have matching regex (matches some string in square brackets)
+    regex_index = dna_rna_metrics[dna_rna_metrics.iloc[:, 0].fillna('').str.match(r"^\[(.*)\]\s*$")].index.tolist()
 
-    # set metrics as column headings
-    transposed_df.columns = transposed_df.iloc[0]
-    transposed_df = transposed_df[1:]
+    # drop those matching regex and empty lines
+    dna_rna_metrics = dna_rna_metrics.drop(index=regex_index)
+    dna_rna_metrics = dna_rna_metrics.dropna(how='all')
+
+    # drop all duplicate Metric (UOM) rows with sample names
+    dna_rna_metrics = dna_rna_metrics.drop_duplicates()
+
+    # Now we have a clean df of relevant DNA and RNA metrics, get analysis status and concat
+    # filter for just the analysis stats and drop empty lines
+    analysis_stats = df.iloc[anaysis_status_index+1:dna_lib_qc_index-1]
+    analysis_stats = analysis_stats.dropna(how= "all", axis=1)
+
+    # set first cells as empty -- keeping it consistent to be able to concat later
+    dna_rna_metrics.iloc[0, 0] = ""
+    analysis_stats.iloc[0, 0] = ""
+
+    # set first column as header for both dfs
+    dna_rna_metrics.columns = dna_rna_metrics.iloc[0]
+    dna_rna_metrics = dna_rna_metrics[1:]
+
+    analysis_stats.columns = analysis_stats.iloc[0]
+    analysis_stats = analysis_stats[1:]
+
+    # combibe both dfs and set the index
+    parsed_df = pd.concat([analysis_stats, dna_rna_metrics])
+    parsed_df.set_index('', inplace=True)
+
+    # transpose df
+    transposed_df = parsed_df.transpose()
 
     return transposed_df
 
@@ -161,7 +150,7 @@ def add_contamination_bool(full_df):
             :, "CONTAMINATION_P_VALUE"
         ].astype(float)
     except:
-        print("Error: Could not convert CONTAMINATION_SCORE and CONTAMINATION_P_VALUE to floats")
+        print("Could not convert CONTAMINATION_SCORE and CONTAMINATION_P_VALUE to floats")
         raise ValueError
 
     # specify conditions
@@ -183,7 +172,7 @@ def add_contamination_bool(full_df):
     try:
         full_df.loc[~nan_values, "CONTAMINATION_SUMMARY"] = ~filters[~nan_values]
     except:
-        print("Error: Could not specify CONTAMINATION_SUMMARY based on contamination thresholds.")
+        print("Could not specify CONTAMINATION_SUMMARY based on contamination thresholds.")
 
     # add header to index column
     full_df.index.name = "Sample"
@@ -250,8 +239,7 @@ def main():
     rna_output_filename = "MetricsOutput_MultiQC_RNA.tsv"
 
     parsed_file = parse_metricsoutput_file(args.tsv_input)
-    transposed_df = transpose_table(parsed_file)
-    edited_df = edit_column_headers(transposed_df)
+    edited_df = edit_column_headers(parsed_file)
     final_df = add_contamination_bool(edited_df)
     df_to_tsv(final_df, dna_output_filename, rna_output_filename)
 
