@@ -139,7 +139,7 @@ def add_contamination_bool(full_df):
         final modified dataframe
     """
     # replace NA string with null value
-    full_df.replace("NA", np.nan, inplace=True)
+    full_df.replace("NA", pd.NA, inplace=True)
 
     # contamination metrics converted to float for numerical filtering
     try:
